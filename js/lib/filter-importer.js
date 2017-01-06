@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import postcssSyntax from 'postcss-scss';
 
+import cleanImportUrl from './clean-import-url';
+import defaultOptions from './default-options';
+import extractImportFilters from './extract-import-filters';
+
 /**
  * Import only certain CSS elements form a file.
  */
@@ -12,52 +16,24 @@ export default class FilterImporter {
    *   Configuration options.
    */
   constructor(options = {}) {
-    const defaultOptions = {
-      includePaths: [process.cwd()],
-    };
     /** @type {Object} */
     this.options = Object.assign({}, defaultOptions, options);
   }
 
   /**
-   * Parse a url for filters.
-   *
-   * @param {string} url
-   *   Import url from node-sass.
-   * @return {Object}
-   *   Cleaned up url and filter names array.
-   */
-  parseUrl(url) {
-    // Find filters in the import url and
-    // return a cleaned up url and the filter names.
-    let cleanUrl = url;
-    let filterNames;
-    const selectorFiltersMatch = url.match(/\[([\s\S]*)]/);
-    if (selectorFiltersMatch) {
-      cleanUrl = url.replace(/(\r\n|\n|\r)/gm, ` `).split(` from `)[1].trim();
-      // Create an array with filter names.
-      filterNames = selectorFiltersMatch[1].split(`,`)
-        .map(Function.prototype.call, String.prototype.trim);
-    }
-    return { url: cleanUrl, filterNames };
-  }
-
-  /**
    * Extract filters from a file with the given url.
    *
-   * @param {string} cleanUrl
-   *   Cleaned up import url from node-sass.
+   * @param {String} cleanUrl
+   *   Cleaned up node-sass import url.
    * @param {Array} filterNames
-   *   Array of filter names array.
-   * @return {string}
+   *   Array of filter names.
+   * @return {String|null}
    *   Contents string or null.
    */
   extractFilters(cleanUrl, filterNames) {
-    let contents = null;
+    if (!filterNames) return null;
 
-    if (!filterNames) {
-      return contents;
-    }
+    let contents = null;
 
     this.options.includePaths.some((includePath) => {
       try {
@@ -76,15 +52,14 @@ export default class FilterImporter {
   /**
    * Synchronously resolve filtered contents from a file with the given url.
    *
-   * @param {string} url
+   * @param {String} url
    *   Import url from node-sass.
    * @return {Object|null}
    *   Contents object or null.
    */
   resolveSync(url) {
-    const data = this.parseUrl(url);
-    const cleanUrl = data.url;
-    const filterNames = data.filterNames;
+    const cleanUrl = cleanImportUrl(url);
+    const filterNames = extractImportFilters(url);
     const contents = this.extractFilters(cleanUrl, filterNames);
 
     return contents ? { contents } : null;
@@ -93,7 +68,7 @@ export default class FilterImporter {
   /**
    * Asynchronously resolve filtered contents from a file with the given url.
    *
-   * @param {string} url
+   * @param {String} url
    *   Import url from node-sass.
    * @return {Promise}
    *   Promise for a contents object.

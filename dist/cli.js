@@ -3,130 +3,180 @@
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
 var path = _interopDefault(require('path'));
+var uniqueConcat = _interopDefault(require('unique-concat'));
 var CssNodeExtract = _interopDefault(require('css-node-extract'));
 var fs = _interopDefault(require('fs'));
 var postcssSyntax = _interopDefault(require('postcss-scss'));
 
 /**
+ * Default options.
+ */
+var defaultOptions = {
+  includePaths: [process.cwd()]
+};
+
+/**
+ * Clean an import url from filters.
+ *
+ * @param {String} url
+ *   Import url from node-sass.
+ * @return {String}
+ *   Cleaned up node-sass import url.
+ */
+function cleanImportUrl() {
+  var url = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
+
+  var cleanUrl = url.split("from").reverse()[0].trim();
+
+  return cleanUrl;
+}
+
+/**
+ * Extract import filters from a string.
+ *
+ * @param {String} string
+ *   A string that may contains import filters.
+ * @return {Array}
+ *   Array of found import filters.
+ */
+function extractImportFilters() {
+  var string = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
+
+  var filterMatch = string.match(/\[([\s\S]*)]/);
+
+  if (filterMatch && filterMatch[1]) {
+    return filterMatch[1].split(",").map(function (item) {
+      return item.trim();
+    });
+  }
+
+  return [];
+}
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/**
  * Import only certain CSS elements form a file.
  */
-var FilterImporter = function FilterImporter(options) {
-  if ( options === void 0 ) options = {};
 
-  var defaultOptions = {
-    includePaths: [process.cwd()],
-  };
-  /** @type {Object} */
-  this.options = Object.assign({}, defaultOptions, options);
-};
+var FilterImporter = function () {
+  /**
+   * @param {Object} options
+   *   Configuration options.
+   */
+  function FilterImporter() {
+    var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 
-/**
- * Parse a url for filters.
- *
- * @param {string} url
- * Import url from node-sass.
- * @return {Object}
- * Cleaned up url and filter names array.
- */
-FilterImporter.prototype.parseUrl = function parseUrl (url) {
-  // Find filters in the import url and
-  // return a cleaned up url and the filter names.
-  var cleanUrl = url;
-  var filterNames;
-  var selectorFiltersMatch = url.match(/\[([\s\S]*)]/);
-  if (selectorFiltersMatch) {
-    cleanUrl = url.replace(/(\r\n|\n|\r)/gm, " ").split(" from ")[1].trim();
-    // Create an array with filter names.
-    filterNames = selectorFiltersMatch[1].split(",")
-      .map(Function.prototype.call, String.prototype.trim);
-  }
-  return { url: cleanUrl, filterNames: filterNames };
-};
+    _classCallCheck(this, FilterImporter);
 
-/**
- * Extract filters from a file with the given url.
- *
- * @param {string} cleanUrl
- * Cleaned up import url from node-sass.
- * @param {Array} filterNames
- * Array of filter names array.
- * @return {string}
- * Contents string or null.
- */
-FilterImporter.prototype.extractFilters = function extractFilters (cleanUrl, filterNames) {
-  var contents = null;
-
-  if (!filterNames) {
-    return contents;
+    /** @type {Object} */
+    this.options = Object.assign({}, defaultOptions, options);
   }
 
-  this.options.includePaths.some(function (includePath) {
-    try {
-      var css = fs.readFileSync(path.resolve(includePath, cleanUrl), { encoding: "utf8" });
-      if (css) {
-        contents = CssNodeExtract.processSync({ css: css, filterNames: filterNames, postcssSyntax: postcssSyntax });
-        return true;
-      }
-    } catch (error) {} // eslint-disable-line no-empty
-    return false;
-  });
+  /**
+   * Extract filters from a file with the given url.
+   *
+   * @param {String} cleanUrl
+   *   Cleaned up node-sass import url.
+   * @param {Array} filterNames
+   *   Array of filter names.
+   * @return {String|null}
+   *   Contents string or null.
+   */
 
-  return contents;
-};
+
+  _createClass(FilterImporter, [{
+    key: 'extractFilters',
+    value: function extractFilters(cleanUrl, filterNames) {
+      if (!filterNames) return null;
+
+      var contents = null;
+
+      this.options.includePaths.some(function (includePath) {
+        try {
+          var css = fs.readFileSync(path.resolve(includePath, cleanUrl), { encoding: 'utf8' });
+          if (css) {
+            contents = CssNodeExtract.processSync({ css: css, filterNames: filterNames, postcssSyntax: postcssSyntax });
+            return true;
+          }
+        } catch (error) {} // eslint-disable-line no-empty
+        return false;
+      });
+
+      return contents;
+    }
+
+    /**
+     * Synchronously resolve filtered contents from a file with the given url.
+     *
+     * @param {String} url
+     *   Import url from node-sass.
+     * @return {Object|null}
+     *   Contents object or null.
+     */
+
+  }, {
+    key: 'resolveSync',
+    value: function resolveSync(url) {
+      var cleanUrl = cleanImportUrl(url);
+      var filterNames = extractImportFilters(url);
+      var contents = this.extractFilters(cleanUrl, filterNames);
+
+      return contents ? { contents: contents } : null;
+    }
+
+    /**
+     * Asynchronously resolve filtered contents from a file with the given url.
+     *
+     * @param {String} url
+     *   Import url from node-sass.
+     * @return {Promise}
+     *   Promise for a contents object.
+     */
+
+  }, {
+    key: 'resolve',
+    value: function resolve(url) {
+      var _this = this;
+
+      return new Promise(function (promiseResolve) {
+        promiseResolve(_this.resolveSync(url));
+      });
+    }
+  }]);
+
+  return FilterImporter;
+}();
 
 /**
- * Synchronously resolve filtered contents from a file with the given url.
+ * Filter importer for node-sass.
  *
- * @param {string} url
- * Import url from node-sass.
+ * @param {Object} customOptions
+ *   Custom configuration options.
  * @return {Object|null}
- * Contents object or null.
+ *   Contents object or null.
  */
-FilterImporter.prototype.resolveSync = function resolveSync (url) {
-  var data = this.parseUrl(url);
-  var cleanUrl = data.url;
-  var filterNames = data.filterNames;
-  var contents = this.extractFilters(cleanUrl, filterNames);
+var importer = (function () {
+  var customOptions = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+  return function importer(url, prev) {
+    var options = Object.assign({}, defaultOptions, customOptions);
+    var nodeSassIncludePaths = this.options.includePaths.split(path.delimiter);
 
-  return contents ? { contents: contents } : null;
-};
+    if (path.isAbsolute(prev)) nodeSassIncludePaths.push(path.dirname(prev));
+    options.includePaths = uniqueConcat(options.includePaths, nodeSassIncludePaths).filter(function (item) {
+      return item.length;
+    });
+
+    var filterImporter = new FilterImporter(options);
+    return filterImporter.resolveSync(url);
+  };
+});
 
 /**
- * Asynchronously resolve filtered contents from a file with the given url.
- *
- * @param {string} url
- * Import url from node-sass.
- * @return {Promise}
- * Promise for a contents object.
+ * CLI importer.
  */
-FilterImporter.prototype.resolve = function resolve (url) {
-    var this$1 = this;
-
-  return new Promise(function (promiseResolve) {
-    promiseResolve(this$1.resolveSync(url));
-  });
-};
-
-var filterImporter = new FilterImporter();
-
-/**
- * Filter importer for node-sass
- *
- * @param {string} url
- *   The path in import as-is, which LibSass encountered.
- * @param {string} prev
- *   The previously resolved path.
- */
-var cli = function (url, prev) {
-  // Create an array of include paths to search for files.
-  var includePaths = [];
-  if (path.isAbsolute(prev)) {
-    includePaths.push(path.dirname(prev));
-  }
-  filterImporter.options.includePaths = includePaths
-    .concat(this.options.includePaths.split(path.delimiter));
-
-  return filterImporter.resolveSync(url);
-};
+var cli = importer();
 
 module.exports = cli;
