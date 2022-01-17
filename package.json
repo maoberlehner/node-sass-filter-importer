@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "css-node-extract": "^0.1.0",
-    "postcss-scss": "^0.4.0",
+    "postcss-scss": "^2.0.0",
     "unique-concat": "^0.2.2"
   },
   "devDependencies": {
